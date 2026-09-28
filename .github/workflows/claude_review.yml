@@ -36,7 +36,7 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
@@ -47,16 +47,23 @@ jobs:
           # Preserve main's CLAUDE.md before any fork checkout
           cp CLAUDE.md /tmp/main-claude.md 2>/dev/null || touch /tmp/main-claude.md
 
-          # Remove Claude project config from main
-          rm -rf .claude/
+          # Recursively remove every agent-instruction file from the checkout
+          strip_agent_instructions() {
+            find . -path ./.git -prune -o -type d -name '.claude' -print0 | xargs -0 -r rm -rf --
+            find . -path ./.git -prune -o -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' -o -name 'AGENTS.md' -o -name '.mcp.json' -o -name '.cursorrules' \) -print0 | xargs -0 -r rm -f --
+          }
+          strip_agent_instructions
 
           # Install post-checkout hook: fires automatically after claude-code-action
-          # does `git checkout <fork-branch>`, restoring main's CLAUDE.md and wiping
-          # the fork's .claude/ so injection via project config is impossible
+          # does `git checkout <fork-branch>`, recursively wiping every nested
+          # CLAUDE.md / AGENTS.md / .claude/ / .mcp.json from the untrusted tree at
+          # any depth and restoring main's CLAUDE.md, so injection via project
+          # config is impossible
           {
             echo '#!/bin/bash'
+            echo 'find . -path ./.git -prune -o -type d -name ".claude" -print0 | xargs -0 -r rm -rf --'
+            echo 'find . -path ./.git -prune -o -type f \( -name "CLAUDE.md" -o -name "CLAUDE.local.md" -o -name "AGENTS.md" -o -name ".mcp.json" -o -name ".cursorrules" \) -print0 | xargs -0 -r rm -f --'
             echo 'cp /tmp/main-claude.md ./CLAUDE.md 2>/dev/null || rm -f ./CLAUDE.md'
-            echo 'rm -rf ./.claude/'
           } > .git/hooks/post-checkout
           chmod +x .git/hooks/post-checkout
 
